@@ -1502,8 +1502,10 @@
 	function headerNoCache()	{
 		$disableAcquireCacheData = FALSE;
 
-		if (strtolower($_SERVER['HTTP_CACHE_CONTROL'])==='no-cache' || strtolower($_SERVER['HTTP_PRAGMA'])==='no-cache')	{
-			$disableAcquireCacheData = TRUE;
+		if ($this->beUserLogin)	{
+			if (strtolower($_SERVER['HTTP_CACHE_CONTROL'])==='no-cache' || strtolower($_SERVER['HTTP_PRAGMA'])==='no-cache')	{
+				$disableAcquireCacheData = TRUE;
+			}
 		}
 
 			// Call hook for possible by-pass of requiring of page cache (for recaching purpose)
@@ -2866,17 +2868,17 @@ if (version == "n3") {
 						'tstamp' => $GLOBALS['EXEC_TIME']						// Time stamp
 					);
 
-					    	// Hook for preprocessing the list of fields to insert into sys_stat:
+						// Hook for preprocessing the list of fields to insert into sys_stat:
 					if (is_array($this->TYPO3_CONF_VARS['SC_OPTIONS']['tslib/class.tslib_fe.php']['sys_stat-PreProcClass']))    {
 						foreach($this->TYPO3_CONF_VARS['SC_OPTIONS']['tslib/class.tslib_fe.php']['sys_stat-PreProcClass'] as $_classRef)    {
-					        	$_procObj = &t3lib_div::getUserObj($_classRef);
-					        	$insertFields = $_procObj->sysstat_preProcessFields($insertFields,$this);
+							$_procObj = &t3lib_div::getUserObj($_classRef);
+							$insertFields = $_procObj->sysstat_preProcessFields($insertFields,$this);
 						}
 					}
 
 
 					$GLOBALS['TT']->push('Store SQL');
-						$GLOBALS['TYPO3_DB']->exec_INSERTquery('sys_stat', $insertFields);
+					$GLOBALS['TYPO3_DB']->exec_INSERTquery('sys_stat', $insertFields);
 					$GLOBALS['TT']->pull();
 				}
 
@@ -3449,8 +3451,8 @@ if (version == "n3") {
 	 * @return	void
 	 */
 	function make_seed() {
-	    list($usec, $sec) = explode(' ', microtime());
-	    $seedV = (float)$sec + ((float)$usec * 100000);
+		list($usec, $sec) = explode(' ', microtime());
+		$seedV = (float)$sec + ((float)$usec * 100000);
 		srand($seedV);
 	}
 

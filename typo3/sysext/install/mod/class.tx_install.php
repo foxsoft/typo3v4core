@@ -240,13 +240,17 @@ class tx_install extends t3lib_install {
 			// ****************************
 			// Initializing incoming vars.
 			// ****************************
-		$this->INSTALL = t3lib_div::_GP("TYPO3_INSTALL");
-		$this->mode = t3lib_div::_GP("mode");
-		$this->step = t3lib_div::_GP("step");
-		if ($_GET["TYPO3_INSTALL"]["type"])	$this->INSTALL["type"] = $_GET["TYPO3_INSTALL"]["type"];
+		$this->INSTALL = t3lib_div::_GP('TYPO3_INSTALL');
+		$this->mode = t3lib_div::_GP('mode');
+		$this->step = t3lib_div::_GP('step');
+		$this->redirect_url = t3lib_div::_GP('redirect_url');
+
+		if ($_GET['TYPO3_INSTALL']['type'])	{
+			$this->INSTALL['type'] = $_GET['TYPO3_INSTALL']['type'];
+		}
 
 		if ($this->step==3)	{
-			$this->INSTALL["type"]="database";
+			$this->INSTALL['type']='database';
 		}
 
 		if ($this->mode=="123")	{
@@ -278,7 +282,7 @@ Better yet you can add a die() function call to typo3/install/index.php after us
 
 IF THE INSTALL TOOL CRASHES...
 The Install Tool is checking PHPs support for image formats. However certain versions of PHP (fx. 4.3.0 with bundled GD) will crash when trying to read the PNG test file. If this happens you will see a blank screen or error message.
-Workaround: Open the file typo3/t3lib/class.t3lib_install.php, go to the line where the function "isPNG()" is defined and make it return "0" hardcoded. PNG is not checked anymore and the rest of the Install Tool will work as expected. The same has been known with the other image formats as well. You can use a similar method to bypass the testing if that is also a problem.
+Workaround: Open the file typo3/sysext/install/mod/class.tx_install.php, go to the line where the function "isPNG()" is defined and make it return "0" hardcoded. PNG is not checked anymore and the rest of the Install Tool will work as expected. The same has been known with the other image formats as well. You can use a similar method to bypass the testing if that is also a problem.
 On behalf of PHP we regret this inconvenience.
 
 BTW: This Install Tool will only work if cookies are accepted by your web browser. If this dialog pops up over and over again you didn\'t enable cookies.
@@ -288,8 +292,13 @@ BTW: This Install Tool will only work if cookies are accepted by your web browse
 			// Check if the password from TYPO3_CONF_VARS combined with uKey matches the sKey cookie. If not, ask for password.
 		$sKey = $_COOKIE[$this->cookie_name];
 
-		if (md5($GLOBALS["TYPO3_CONF_VARS"]["BE"]["installToolPassword"]."|".$uKey) == $sKey || $this->checkPassword($uKey))	{
+		if (md5($GLOBALS['TYPO3_CONF_VARS']['BE']['installToolPassword'].'|'.$uKey) == $sKey || $this->checkPassword($uKey))	{
 			$this->passwordOK=1;
+			if($this->redirect_url)	{
+				header('Location: '.$this->redirect_url);
+			}
+		} else {
+			$this->loginForm();
 		}
 
 		if ($GLOBALS["CLIENT"]["SYSTEM"]=="unix" && $GLOBALS["CLIENT"]["BROWSER"]=="konqu")	{
@@ -324,21 +333,6 @@ BTW: This Install Tool will only work if cookies are accepted by your web browse
 			}
 			return true;
 		} else {
-			$this->messageFunc_nl2br=0;
-			$this->silent=0;
-			$content = '<form action="'.$this->action.'" method="POST">
-			<input type="password" name="password"><BR>
-			<input type="submit" value="Log in"><br>
-			<br>
-
-			'.$this->fw('The Install Tool Password is <i>not</i> the admin password of TYPO3.<BR>
-				If you don\'t know the current password, you can set a new one by setting the value of $TYPO3_CONF_VARS["BE"]["installToolPassword"] in typo3conf/localconf.php to the md5() hash value of the password you desire.'.
-				($p?"<BR><BR>The password you just tried has this md5-value: <BR><BR>".md5($p):"")
-				).'
-			</form>';
-
-			$this->message("Password", "Enter the Install Tool Password", $content,3);
-			echo $this->outputWrapper($this->printAll());
 				// Bad password, send warning:
 			if ($p)	{
 				$wEmail = $GLOBALS["TYPO3_CONF_VARS"]["BE"]["warning_email_addr"];
@@ -354,9 +348,31 @@ REMOTE_ADDR was '".t3lib_div::getIndpEnv("REMOTE_ADDR")."' (".t3lib_div::getIndp
 					);
 				}
 			}
-
 			return false;
 		}
+	}
+
+	function loginForm()	{
+		$p = t3lib_div::_GP('password');
+		$redirect_url = $this->redirect_url ? $this->redirect_url : $this->action;
+
+		$this->messageFunc_nl2br=0;
+		$this->silent=0;
+
+		$content = '<form action="index.php" method="POST">
+			<input type="password" name="password"><BR>
+			<input type="hidden" name="redirect_url" value="'.$redirect_url.'">
+			<input type="submit" value="Log in"><br>
+			<br>
+
+			'.$this->fw('The Install Tool Password is <i>not</i> the admin password of TYPO3.<BR>
+				If you don\'t know the current password, you can set a new one by setting the value of $TYPO3_CONF_VARS["BE"]["installToolPassword"] in typo3conf/localconf.php to the md5() hash value of the password you desire.'.
+				($p ? '<BR><BR>The password you just tried has this md5-value: <BR><BR>'.md5($p) : '')
+				).'
+			</form>';
+
+		$this->message('Password', 'Enter the Install Tool Password', $content,3);
+		echo $this->outputWrapper($this->printAll());
 	}
 
 	/**
@@ -837,22 +853,19 @@ REMOTE_ADDR was '".t3lib_div::getIndpEnv("REMOTE_ADDR")."' (".t3lib_div::getIndp
 			$save_to_file = $this->INSTALL["FILE"]["name"];
 			if (@is_file($save_to_file))	{
 				$save_to_file_md5 = md5($save_to_file);
-				if (isset($this->INSTALL["FILE"][$save_to_file_md5]) && t3lib_div::isFirstPartOfStr($save_to_file,$EDIT_path."") && substr($save_to_file,-1)!="~")	{
+				if (isset($this->INSTALL['FILE'][$save_to_file_md5]) && t3lib_div::isFirstPartOfStr($save_to_file,$EDIT_path.'') && substr($save_to_file,-1)!='~' && !strstr($save_file,'_bak'))	{
 					$this->INSTALL["typo3conf_files"] = $save_to_file;
 					$save_fileContent = $this->INSTALL["FILE"][$save_to_file_md5];
 
 					if ($this->INSTALL["FILE"]["win_to_unix_br"])	{
 						$save_fileContent = str_replace(chr(13).chr(10),chr(10),$save_fileContent);
 					}
+
+					$backupFile = $this->getBackupFilename($save_to_file);
 					if ($this->INSTALL["FILE"]["backup"])	{
-						if (@is_file($save_to_file."~"))	unlink($save_to_file."~");
-						rename($save_to_file,$save_to_file."~");
-						$this->contentBeforeTable.='Backup written to <strong>'.$save_to_file.'~</strong><BR>';
-					} else {
-						if (@is_file($save_to_file."~"))	{
-							unlink($save_to_file."~");
-							$this->contentBeforeTable.='Backup REMOVED! (<strong>'.$save_to_file.'~</strong>)<BR>';
-						}
+						if (@is_file($backupFile))	{ unlink($backupFile); }
+						rename($save_to_file,$backupFile);
+						$this->contentBeforeTable.='Backup written to <strong>'.$backupFile.'</strong><BR>';
 					}
 
 					t3lib_div::writeFile($save_to_file,$save_fileContent);
@@ -896,9 +909,11 @@ REMOTE_ADDR was '".t3lib_div::getIndpEnv("REMOTE_ADDR")."' (".t3lib_div::getIndp
 			//--></style>
 			';
 
+			$backupFile = $this->getBackupFilename($this->INSTALL['typo3conf_files']);
 			$fileContent = t3lib_div::getUrl($this->INSTALL["typo3conf_files"]);
-			$this->contentBeforeTable.= '<form action="'.$this->action.'" method="POST">
-				'.(substr($this->INSTALL["typo3conf_files"],-1)!="~"?'<input type="submit" name="TYPO3_INSTALL[SAVE_FILE]" value="Save file">&nbsp;':'').'<input type="submit" name="_close" value="Close">
+			$this->contentBeforeTable.= '<form action="'.$this->action.'" method="POST">'.(substr($this->INSTALL['typo3conf_files'],-1)!='~' && !strstr($this->INSTALL['typo3conf_files'],'_bak') ? '
+				<input type="submit" name="TYPO3_INSTALL[SAVE_FILE]" value="Save file">&nbsp;' : '').'
+				<input type="submit" name="_close" value="Close">
 				<BR>File: '.$this->INSTALL["typo3conf_files"].'
 				<BR>MD5-sum: '.md5($fileContent).'
 				<BR>
@@ -907,8 +922,8 @@ REMOTE_ADDR was '".t3lib_div::getIndpEnv("REMOTE_ADDR")."' (".t3lib_div::getIndp
 				'.($this->allowFileEditOutsite_typo3conf_dir?'<input type="hidden" name="TYPO3_INSTALL[FILE][EDIT_path]" value="'.$this->INSTALL["FILE"]["EDIT_path"].'">':'').'
 				<input type="hidden" name="TYPO3_INSTALL[FILE][prevMD5]" value="'.md5($fileContent).'">
 				<textarea rows="30" name="TYPO3_INSTALL[FILE]['.md5($this->INSTALL["typo3conf_files"]).']" wrap="off"'.$this->formWidthText(48,"width:98%;height:80%","off").'>'.t3lib_div::formatForTextarea($fileContent).'</textarea><BR>
-				<input type="checkbox" name="TYPO3_INSTALL[FILE][win_to_unix_br]" value="1"'.(TYPO3_OS=="WIN"?"":" CHECKED").'> Convert windows linebreaks (13-10) to unix (10)<BR>
-				<input type="checkbox" name="TYPO3_INSTALL[FILE][backup]" value="1"'.(@is_file($this->INSTALL["typo3conf_files"]."~") ? " CHECKED":"").'> Make backup copy (else remove any backup copy, prepended by "~")<BR>
+				<input type="checkbox" name="TYPO3_INSTALL[FILE][win_to_unix_br]" value="1"'.(TYPO3_OS=="WIN"?"":" checked").'> Convert Windows linebreaks (13-10) to Unix (10)<BR>
+				<input type="checkbox" name="TYPO3_INSTALL[FILE][backup]" value="1"'.(@is_file($backupFile) ? ' checked' : '').'> Make backup copy (rename to '.basename($backupFile).')<BR>
 				'.
 			'</form>';
 		}
@@ -1880,7 +1895,8 @@ From sub-directory:
 
 		if($file=='gm') {
 			$GLOBALS['TYPO3_CONF_VARS']['GFX']['im_version_5'] = 'gm';
-			$file = 'identify';	// Work-around, preventing execution of "gm gm"
+			$file = 'identify';		// Work-around, preventing execution of "gm gm"
+			$parameters = '-version';	// Work-around - GM doesn't like to be executed without any arguments
 		} else	{
 			$GLOBALS['TYPO3_CONF_VARS']['GFX']['im_version_5'] = '1';
 
@@ -1889,7 +1905,7 @@ From sub-directory:
 			}
 		}
 
-		$cmd = t3lib_div::imageMagickCommand($file, '', $path);
+		$cmd = t3lib_div::imageMagickCommand($file, $parameters, $path);
 		exec($cmd, $retVal);
 		$string = $retVal[0];
 		list(,$ver) = explode('Magick', $string);
@@ -1974,7 +1990,7 @@ From sub-directory:
 					// Database:
 				$out='
 				<table border=0 cellpadding=0 cellspacing=0>
-				<form action="'.$this->action.'" method="POST">';
+				<form name="setupGeneral" action="'.$this->action.'" method="POST">';
 
 				$out.=$this->wrapInCells("Username:", '<input type="text" name="TYPO3_INSTALL[localconf.php][typo_db_username]" value="'.htmlspecialchars(TYPO3_db_username?TYPO3_db_username:($this->config_array["sql.safe_mode_user"]?$this->config_array["sql.safe_mode_user"]:"")).'">'.($this->config_array["sql.safe_mode_user"]?"<BR>sql.safe_mode_user: <strong>".$this->config_array["sql.safe_mode_user"]."</strong>":""));
 				$out.=$this->wrapInCells("Password:", '<input type="text" name="TYPO3_INSTALL[localconf.php][typo_db_password]" value="'.htmlspecialchars(TYPO3_db_password).'">');
@@ -2002,7 +2018,8 @@ From sub-directory:
 				if ($this->mode!="123")	{
 					$out.=$this->wrapInCells("Site name:", '<input type="text" name="TYPO3_INSTALL[localconf.php][sitename]" value="'.htmlspecialchars($GLOBALS["TYPO3_CONF_VARS"]["SYS"]["sitename"]).'">');
 					$out.=$this->wrapInCells("", "<BR>");
-					$out.=$this->wrapInCells("Encryption key:", '<input type="text" name="TYPO3_INSTALL[localconf.php][encryptionKey]" value="'.htmlspecialchars($GLOBALS["TYPO3_CONF_VARS"]["SYS"]["encryptionKey"]).'">');
+					$out.='<script type="text/javascript" src="../md5.js"></script><script type="text/javascript">function generateEncryptionKey(key) {time=new Date(); key=MD5(time.getMilliseconds().toString());while(key.length<66){key=key+MD5(key)};return key;}</script>';
+					$out.=$this->wrapInCells("Encryption key:", '<a name="set_encryptionKey" /><input type="text" name="TYPO3_INSTALL[localconf.php][encryptionKey]" value="'.htmlspecialchars($GLOBALS["TYPO3_CONF_VARS"]["SYS"]["encryptionKey"]).'"><br /><input type="button" onclick="document.forms[\'setupGeneral\'].elements[\'TYPO3_INSTALL[localconf.php][encryptionKey]\'].value=generateEncryptionKey(document.forms[\'setupGeneral\'].elements[\'TYPO3_INSTALL[localconf.php][encryptionKey]\'].value);" value="Generate random key">');
 					$out.=$this->wrapInCells("", "<BR>");
 
 						// Other
@@ -2073,7 +2090,7 @@ From sub-directory:
 								} else $this->messages[]= $errorMessages[] = "Password '".$value."' was longer than 50 chars (...not saved)";
 							break;
 							case "typo_db_host":
-								if (!ereg("[^[:alnum:]_\.-:]",$value) && strlen($value)<50)	{
+								if (!ereg("[^[:alnum:]_\.:-]",$value) && strlen($value)<50)	{
 									if (strcmp(TYPO3_db_host,$value))		$this->setValueInLocalconfFile($lines, '$typo_db_host', $value);
 								} else $this->messages[]= $errorMessages[] = "Host '".$value."' was not alphanumeric, a-zA-Z0-9_-:., or longer than 50 chars (...not saved)";
 							break;
@@ -2822,6 +2839,12 @@ From sub-directory:
 						if (!@is_file($overlay))	die("Error: ".$overlay." was not a file");
 						if (!@is_file($mask))	die("Error: ".$mask." was not a file");
 
+					if ($imageProc->maskNegate)	{
+						$outmask = $imageProc->tempPath.$imageProc->filenamePrefix.t3lib_div::shortMD5($imageProc->alternativeOutputKey."mask").".gif";
+						$imageProc->imageMagickExec($mask, $outmask, '-negate');
+						$mask = $outmask;
+					}
+
 					$output = $imageProc->tempPath.$imageProc->filenamePrefix.t3lib_div::shortMD5($imageProc->alternativeOutputKey."combine1").".jpg";
 					$imageProc->combineExec($input,$overlay,$mask,$output);
 					$fileInfo = $imageProc->getImageDimensions($output);
@@ -2836,6 +2859,13 @@ From sub-directory:
 						if (!@is_file($input))	die("Error: ".$input." was not a file");
 						if (!@is_file($overlay))	die("Error: ".$overlay." was not a file");
 						if (!@is_file($mask))	die("Error: ".$mask." was not a file");
+
+					if ($imageProc->maskNegate)	{
+						$outmask = $imageProc->tempPath.$imageProc->filenamePrefix.t3lib_div::shortMD5($imageProc->alternativeOutputKey."mask2").".gif";
+						$imageProc->imageMagickExec($mask, $outmask, '-negate');
+						$mask = $outmask;
+					}
+
 					$output = $imageProc->tempPath.$imageProc->filenamePrefix.t3lib_div::shortMD5($imageProc->alternativeOutputKey."combine2").".jpg";
 					$imageProc->combineExec($input,$overlay,$mask,$output);
 					$fileInfo = $imageProc->getImageDimensions($output);
@@ -4749,6 +4779,23 @@ A:hover {color: #000066}
 			$wTags.=' cols="'.$size.'"';
 		}
 		return $wTags;
+	}
+
+	/**
+	 * Return the filename that will be used for the backup.
+	 * It is important that backups of PHP files still stay as a PHP file, otherwise they could be viewed un-parsed in clear-text.
+	 *
+	 * @param	string		Full path to a file
+	 * @return	string		The name of the backup file (again, including the full path)
+	 */
+	function getBackupFilename($filename)	{
+		if (preg_match('/\.php$/', $filename))	{
+			$backupFile = str_replace('.php', '_bak.php', $filename);
+		} else {
+			$backupFile = $filename.'~';
+		}
+
+		return $backupFile;
 	}
 }
 

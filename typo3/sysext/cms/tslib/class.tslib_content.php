@@ -1066,9 +1066,29 @@ class tslib_cObj {
 				$tablecode.='</tr>';	// ending row
 			}
 			if ($c)	{
-				// Table-tag is inserted
-				$i=$contentPosition;
-				$table_align = (($i==16) ? 'align="'.$align.'"' : '');
+				switch ($contentPosition)	{
+					case '0':	// above
+					case '8':	// below
+						switch ($align)        {	// These settings are needed for Firefox
+							case 'center':
+								$table_align = 'margin-left: auto; margin-right: auto';
+							break;
+							case 'right':
+								$table_align = 'margin-left: auto; margin-right: 0px';
+							break;
+							default:	// Most of all: left
+								$table_align = 'margin-left: 0px; margin-right: auto';
+						}
+						$table_align = 'style="'.$table_align.'"';
+					break;
+					case '16':	// in text
+						$table_align = 'align="'.$align.'"';
+					break;
+					default:
+						$table_align = '';
+				}
+
+					// Table-tag is inserted
 				$tablecode = '<table'.($tableWidth?' width="'.$tableWidth.'"':'').' border="0" cellspacing="0" cellpadding="0" '.$table_align.' class="imgtext-table">'.$tablecode;
 				if ($editIconsHTML)	{	// IF this value is not long since reset.
 					$tablecode.='<tr><td colspan="'.$colspan.'">'.$editIconsHTML.'</td></tr>';
@@ -1572,6 +1592,12 @@ class tslib_cObj {
 		$fieldname_hashArray = Array();
 		$cc = 0;
 
+			// Formname;
+		$formname = $GLOBALS['TSFE']->uniqueHash();
+		if (ctype_digit($formname{0}))	{	// form name must start with a letter
+			$formname = 'a'.$formname;
+		}
+
 		foreach($dataArr as $val)	{
 
 			$cc++;
@@ -1631,7 +1657,7 @@ class tslib_cObj {
 
 					// Accessibility: Set id = fieldname attribute:
 				if ($conf['accessibility'])	{
-					$elementIdAttribute = ' id="'.$confData['fieldname'].'"';
+					$elementIdAttribute = ' id="'.$formname.'_'.md5($confData['fieldname']).'"';
 				} else {
 					$elementIdAttribute = '';
 				}
@@ -1645,7 +1671,12 @@ class tslib_cObj {
 						$cols = t3lib_div::intInRange($cols*$compWidth, 1, 120);
 
 						$rows=trim($fParts[2]) ? t3lib_div::intInRange($fParts[2],1,30) : 5;
-						$wrap=trim($fParts[3]) ? ' wrap="'.trim($fParts[3]).'"' : ' wrap="virtual"';
+						$wrap=trim($fParts[3]);
+						if ($conf['noWrapAttr'] || $wrap === 'disabled')	{
+							$wrap='';
+						} else {
+							$wrap=$wrap ? ' wrap="'.trim($fParts[3]).'"' : ' wrap="virtual"';
+						}
 						$default = $this->getFieldDefaultValue($conf['noValueInsert'], $confData['fieldname'], str_replace('\n',chr(10),trim($parts[2])));
 						$fieldCode=sprintf('<textarea name="%s"'.$elementIdAttribute.' cols="%s" rows="%s"%s'.$addParams.'>%s</textarea>',
 							$confData['fieldname'], $cols, $rows, $wrap, t3lib_div::formatForTextarea($default));
@@ -1826,7 +1857,7 @@ class tslib_cObj {
 						// Field:
 					$fieldLabel = $confData['label'];
 					if ($conf['accessibility'])	{
-						$fieldLabel = '<label for="'.htmlspecialchars($confData['fieldname']).'">'.$fieldLabel.'</label>';
+						$fieldLabel = '<label for="'.$formname.'_'.md5($confData['fieldname']).'">'.$fieldLabel.'</label>';
 					}
 
 						// Getting template code:
@@ -1930,8 +1961,9 @@ class tslib_cObj {
 			}
 		}
 
-			// Formname;
-		$formname = $GLOBALS['TSFE']->uniqueHash();
+			// Wrap all hidden fields in a div tag (see http://bugs.typo3.org/view.php?id=678)
+		$hiddenfields = '<div style="display:none;">'.$hiddenfields.'</div>';
+
 		if ($conf['REQ'])	{
 			$validateForm=' onsubmit="return validateForm(\''.$formname.'\',\''.implode(',',$fieldlist).'\',\''.rawurlencode($conf['goodMess']).'\',\''.rawurlencode($conf['badMess']).'\',\''.rawurlencode($conf['emailMess']).'\')"';
 			$GLOBALS['TSFE']->additionalHeaderData['JSFormValidate'] = '<script type="text/javascript" src="'.$GLOBALS['TSFE']->absRefPrefix.'t3lib/jsfunc.validateform.js"></script>';
@@ -2503,7 +2535,7 @@ class tslib_cObj {
 	 * @return	string		the border attribute
 	 */
 	function getBorderAttr($borderAttr) {
-		if (!t3lib_div::inList('xhtml_strict,xhtml_11,xhtml_2',$GLOBALS['TSFE']->config['config']['doctype']) || $GLOBALS['TSFE']->config['config']['disableImgBorderAttr']) {
+		if (!t3lib_div::inList('xhtml_strict,xhtml_11,xhtml_2',$GLOBALS['TSFE']->config['config']['doctype']) && !$GLOBALS['TSFE']->config['config']['disableImgBorderAttr']) {
 			return $borderAttr;
 		}
 	}
@@ -2537,7 +2569,15 @@ class tslib_cObj {
 				if ($conf['title']) {$params.='&title='.rawurlencode($conf['title']);}
 				if ($conf['wrap']) {$params.='&wrap='.rawurlencode($conf['wrap']);}
 
-				$md5_value = md5($imageFile.'|'.$conf['width'].'|'.$conf['height'].'|'.$conf['effects'].'|'.$GLOBALS['TYPO3_CONF_VARS']['SYS']['encryptionKey'].'|');
+				$md5_value = md5(
+						$imageFile.'|'.
+						$conf['width'].'|'.
+						$conf['height'].'|'.
+						$conf['effects'].'|'.
+						$conf['bodyTag'].'|'.
+						$conf['title'].'|'.
+						$conf['wrap'].'|'.
+						$GLOBALS['TYPO3_CONF_VARS']['SYS']['encryptionKey'].'|');
 
 				$params.= '&md5='.$md5_value;
 				$url = $GLOBALS['TSFE']->absRefPrefix.'showpic.php?file='.rawurlencode($imageFile).$params;
@@ -3032,14 +3072,14 @@ class tslib_cObj {
 				$content=$this->listNum($content,$listNumber,$conf['listNum.']['splitChar']);
 			}
 
-			if ($conf['trim']){$content=trim($content);}
+			if ($conf['trim'])	{ $content=trim($content); }
 
 				// Call stdWrap recursively
-			if ($conf['stdWrap']){$content=$this->stdWrap($content,$conf['stdWrap.']);}
+			if ($conf['stdWrap'])	{ $content=$this->stdWrap($content,$conf['stdWrap.']); }
 
 			if (   ($conf['required'] && (string)$content=='') || ($conf['if.'] && !$this->checkIf($conf['if.'])) || ($conf['fieldRequired'] && !trim($this->data[$conf['fieldRequired']]))    ){
 				$content = '';
-			} else {
+			} else	{
 					// Perform data processing:
 				if ($conf['csConv'])	{ $content=$GLOBALS['TSFE']->csConv($content,$conf['csConv']); }
 				if ($conf['parseFunc.'] || $conf['parseFunc']) {$content=$this->parseFunc($content,$conf['parseFunc.'],$conf['parseFunc']);}
@@ -3715,7 +3755,9 @@ class tslib_cObj {
 						$icon = $this->cObjGetSingle($conf['iconCObject'],$conf['iconCObject.'],'iconCObject');
 					} else {
 						if ($GLOBALS['TYPO3_CONF_VARS']['GFX']['thumbnails'])	{
-							$icon = 't3lib/thumbs.php?&dummy='.$GLOBALS['EXEC_TIME'].'&file='.rawurlencode('../'.$theFile);
+							$thumbSize = '';
+							if ($conf['icon_thumbSize'] || $conf['icon_thumbSize.'])	{ $thumbSize = '&size='.$this->stdWrap($conf['icon_thumbSize'], $conf['icon_thumbSize.']); }
+							$icon = 't3lib/thumbs.php?&dummy='.$GLOBALS['EXEC_TIME'].'&file='.rawurlencode('../'.$theFile).$thumbSize;
 						} else {
 							$icon = 't3lib/gfx/notfound_thumb.gif';
 						}
@@ -4989,7 +5031,7 @@ class tslib_cObj {
 						if ($linktxt=='') $linktxt = $page['title'];
 
 							// Query Params:
-						$addQueryParams = $conf['addQueryString'] ? t3lib_div::getIndpEnv('QUERY_STRING') : '';
+						$addQueryParams = $conf['addQueryString'] ? '&'.t3lib_div::getIndpEnv('QUERY_STRING') : '';
 						$addQueryParams .= trim($this->stdWrap($conf['additionalParams'],$conf['additionalParams.']));
 						if (substr($addQueryParams,0,1)!='&')		{
 							$addQueryParams = '';
@@ -5235,6 +5277,8 @@ class tslib_cObj {
 	 * @return	string		Returns a numerical array with two elements: 1) $mailToUrl, string ready to be inserted into the href attribute of the <a> tag, b) $linktxt: The string between starting and ending <a> tag.
 	 */
 	function getMailTo($mailAddress,$linktxt,$initP='?') {
+		if(!strcmp($linktxt,''))	{ $linktxt = $mailAddress; }
+
 		$mailToUrl = 'mailto:'.$mailAddress;
 
 		if (!$GLOBALS['TSFE']->config['config']['jumpurl_enable'] || $GLOBALS['TSFE']->config['config']['jumpurl_mailto_disable']) {
@@ -5246,8 +5290,9 @@ class tslib_cObj {
 				}
 				if ($GLOBALS['TSFE']->config['config']['spamProtectEmailAddresses_atSubst']) {
 					$atLabel = trim($GLOBALS['TSFE']->config['config']['spamProtectEmailAddresses_atSubst']);
-					$linktxt = str_replace('@',$atLabel?$atLabel:'(at)',$linktxt);
 				}
+				$linktxt = str_replace('@',$atLabel?$atLabel:'(at)',$linktxt);
+
 				if ($GLOBALS['TSFE']->config['config']['spamProtectEmailAddresses_lastDotSubst']) {
 					$lastDotLabel = trim($GLOBALS['TSFE']->config['config']['spamProtectEmailAddresses_lastDotSubst']);
 					$lastDotLabel = $lastDotLabel ? $lastDotLabel : '(dot)';
@@ -6338,7 +6383,7 @@ class tslib_cObj {
 				// removes all pages which are not visible for the user!
 			$listArr = $this->checkPidArray($listArr);
 			if (count($listArr))	{
-			    $query.=' AND '.$table.'.pid IN ('.implode(',',$GLOBALS['TYPO3_DB']->cleanIntArray($listArr)).')';
+				$query.=' AND '.$table.'.pid IN ('.implode(',',$GLOBALS['TYPO3_DB']->cleanIntArray($listArr)).')';
 				$pid_uid_flag++;
 			} else {
 				$pid_uid_flag=0;		// If not uid and not pid then uid is set to 0 - which results in nothing!!
@@ -6625,10 +6670,12 @@ class tslib_cObj {
 								</form>';
 						// wrap the panel
 					if ($conf['innerWrap']) $panel = $this->wrap($panel,$conf['innerWrap']);
+					if ($conf['innerWrap.']) $panel = $this->stdWrap($panel,$conf['innerWrap.']);
 						// add black line:
 					$panel.=$blackLine;
 						// wrap the complete panel
 					if ($conf['outerWrap']) $panel = $this->wrap($panel,$conf['outerWrap']);
+					if ($conf['outerWrap.']) $panel = $this->stdWrap($panel,$conf['outerWrap.']);
 					$finalOut = $content.$panel;
 				break;
 			}
@@ -6790,8 +6837,10 @@ class tslib_cObj {
 			$thick = t3lib_div::intInRange($thick,1,100);
 			$color = $conf['color'] ? $conf['color'] : '#cccccc';
 			if ($conf['innerWrap'])	$content = $this->wrap($content,$conf['innerWrap']);
+			if ($conf['innerWrap.'])	$content = $this->stdWrap($content,$conf['innerWrap.']);
 			$content='<table class="typo3-editPanel-previewBorder" border="'.$thick.'" cellpadding="0" cellspacing="0" bordercolor="'.$color.'" width="100%"><tr><td>'.$content.'</td></tr></table>';
 			if ($conf['outerWrap'])	$content = $this->wrap($content,$conf['outerWrap']);
+			if ($conf['outerWrap.'])	$content = $this->stdWrap($panel,$conf['outerWrap.']);
 		}
 		return $content;
 	}
